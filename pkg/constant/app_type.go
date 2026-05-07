@@ -1,3 +1,3 @@
 package constant
 
-const APP_TYPE = 29
+const APP_TYPE = 36
