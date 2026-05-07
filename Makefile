@@ -20,11 +20,11 @@ run-app: .pulled
 ifeq ($(BRANCH), qa)
 	swag init
 	go build -o $(WORK_DIR)/app/cmd
-	supervisorctl restart hotbox_new_adm
+	supervisorctl restart hotbox-adm-backend
 endif
 ifeq ($(BRANCH), main)
 	go build -o $(WORK_DIR)/app/cmd
-	supervisorctl restart hotbox_new_adm
+	supervisorctl restart hotbox-adm-backend
 endif
 
 lint:
