@@ -359,6 +359,7 @@ func YopTestUserList(c *gin.Context) {
 		hd_task_models.HdYopTestUser
 		DailyIncome      float64 `json:"daily_income"`
 		SelectDateIncome float64 `json:"select_date_income"`
+		ForceFreeze      int64   `json:"force_freeze"`
 	}
 	list := make([]YopTestUserData, 0, len(data))
 	err = copier.Copy(&list, &data)
@@ -366,6 +367,23 @@ func YopTestUserList(c *gin.Context) {
 		response.ResponseFail(err.Error())
 		return
 	}
+
+	// 查询所有用户的冻结金额
+	userIds := make([]int64, 0, len(data))
+	for _, v := range data {
+		userIds = append(userIds, v.UserId)
+	}
+	forceFreezeMap := make(map[int64]int64)
+	if len(userIds) > 0 {
+		wallets, err := models.SysUserWalletDal.GetUserWallets(c, userIds)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			klog.Errorf("YopTestUserList GetUserWallets err: %v", err)
+		}
+		for _, w := range wallets {
+			forceFreezeMap[w.UserId] = w.ForceFreeze
+		}
+	}
+
 	for i := range list {
 		income, ok := userIncomeMap[list[i].Id]
 		if ok {
@@ -377,6 +395,13 @@ func YopTestUserList(c *gin.Context) {
 			if ok {
 				list[i].SelectDateIncome = selectDateIncome
 			}
+		}
+
+		if ff, ok := forceFreezeMap[list[i].UserId]; ok {
+			if ff < 0 {
+				ff = -ff
+			}
+			list[i].ForceFreeze = ff
 		}
 	}
 
@@ -448,7 +473,7 @@ func YopTestUserBalance(c *gin.Context) {
 	}
 	user, err := models.SysUserWalletDal.GetUserWallet(c, yopTestUser.UserId)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		response.ResponseSuccess(models.SysUserWallet{TotalBalance: 0, FreezeBalance: 0})
+		response.ResponseSuccess(models.SysUserWallet{TotalBalance: 0, FreezeBalance: 0, ForceFreeze: 0})
 		return
 	}
 	if err != nil {
