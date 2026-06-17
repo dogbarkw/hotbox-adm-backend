@@ -38,3 +38,28 @@ func (m *SysUserWalletForceFreezeRecord) SumFreezeByUserIdsAndTimeRange(ctx cont
 		First(&total).Error
 	return
 }
+
+// SumFreezeGroupByUserAndTimeRange 按用户ID分组汇总时间范围内的冻结金额
+func (m *SysUserWalletForceFreezeRecord) SumFreezeGroupByUserAndTimeRange(ctx context.Context, userIds []int64, startTime, endTime time.Time) (result map[int64]int64, err error) {
+	type sumResult struct {
+		UserId int64
+		Total  int64
+	}
+	var list []sumResult
+	err = cli.HotDogGormDB.WithContext(ctx).Model(&m).
+		Where("user_id in ?", userIds).
+		Where("amount > 0").
+		Where("create_time >= ?", startTime).
+		Where("create_time <= ?", endTime).
+		Select("user_id, IFNULL(SUM(amount), 0) as total").
+		Group("user_id").
+		Find(&list).Error
+	if err != nil {
+		return
+	}
+	result = make(map[int64]int64, len(list))
+	for _, item := range list {
+		result[item.UserId] = item.Total
+	}
+	return
+}

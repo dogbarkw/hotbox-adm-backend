@@ -57,12 +57,13 @@ func YopTestUserAdd(c *gin.Context) {
 	}
 
 	testUser := &hd_task_models.HdYopTestUser{
-		UserId:   user.UserId,
-		RealName: user.RealName,
-		Mobile:   req.Mobile,
-		UserType: req.UserType,
-		Rate:     req.Rate,
-		Remark:   req.Remark,
+		UserId:     user.UserId,
+		RealName:   user.RealName,
+		Mobile:     req.Mobile,
+		UserType:   req.UserType,
+		Rate:       req.Rate,
+		FreezeRate: req.FreezeRate,
+		Remark:     req.Remark,
 	}
 	row, err := hd_task_models.HdYopTestUserDal.FirstOrCreate(c, testUser)
 	if err != nil {
@@ -85,6 +86,12 @@ func YopTestUserAdd(c *gin.Context) {
 
 	hdYopTestUserCacheKey := fmt.Sprintf("hotbox:yop_divide_test_user:%d", user.UserId)
 	cli.HotDogRedis.Set(c, hdYopTestUserCacheKey, req.Rate, 0)
+
+	// 设置冻结比例缓存
+	if req.FreezeRate > 0 {
+		hdYopTestUserFreezeRateKey := fmt.Sprintf("matrix:yop_divide_test_user_freeze_rate:%d", user.UserId)
+		cli.HotDogRedis.Set(c, hdYopTestUserFreezeRateKey, req.FreezeRate, 0)
+	}
 
 	// 更新到adm操作日志
 	operatorId, _ := c.Get("user_id")
@@ -142,8 +149,9 @@ func YopTestUserUpdate(c *gin.Context) {
 	}
 
 	err = hd_task_models.HdYopTestUserDal.UpdateByParams(c, map[string]any{"id": req.Id}, map[string]any{
-		"rate":   req.Rate,
-		"remark": req.Remark,
+		"rate":        req.Rate,
+		"freeze_rate": req.FreezeRate,
+		"remark":      req.Remark,
 	})
 	if err != nil {
 		response.ResponseFail(err.Error())
@@ -161,6 +169,15 @@ func YopTestUserUpdate(c *gin.Context) {
 	testUser, _ := hd_task_models.HdYopTestUserDal.One(c, req.Id)
 	hdYopTestUserCacheKey := fmt.Sprintf("hotbox:yop_divide_test_user:%d", testUser.UserId)
 	cli.HotDogRedis.Set(c, hdYopTestUserCacheKey, req.Rate, 0)
+
+	// 设置冻结比例缓存
+	if req.FreezeRate > 0 {
+		hdYopTestUserFreezeRateKey := fmt.Sprintf("matrix:yop_divide_test_user_freeze_rate:%d", testUser.UserId)
+		cli.HotDogRedis.Set(c, hdYopTestUserFreezeRateKey, req.FreezeRate, 0)
+	} else {
+		hdYopTestUserFreezeRateKey := fmt.Sprintf("matrix:yop_divide_test_user_freeze_rate:%d", testUser.UserId)
+		cli.HotDogRedis.Del(c, hdYopTestUserFreezeRateKey)
+	}
 
 	response.ResponseSuccess(nil)
 }
@@ -359,7 +376,8 @@ func YopTestUserList(c *gin.Context) {
 		hd_task_models.HdYopTestUser
 		DailyIncome      float64 `json:"daily_income"`
 		SelectDateIncome float64 `json:"select_date_income"`
-		ForceFreeze      int64   `json:"force_freeze"`
+		ForceFreeze                int64   `json:"force_freeze"`
+		UserSelectDateForceFreeze  int64   `json:"user_select_date_force_freeze"`
 	}
 	list := make([]YopTestUserData, 0, len(data))
 	err = copier.Copy(&list, &data)
@@ -385,10 +403,15 @@ func YopTestUserList(c *gin.Context) {
 	}
 
 	var selectDateForceFreezeSum int64
+	var selectDateForceFreezeUserMap map[int64]int64
 	if len(req.StartTime) > 0 && len(req.EndTime) > 0 {
 		selectDateForceFreezeSum, err = models.SysUserWalletForceFreezeRecordDal.SumFreezeByUserIdsAndTimeRange(c, userIds, selectStartTime, selectEndTime)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			klog.Errorf("YopTestUserList SumFreezeByUserIdsAndTimeRange err: %v", err)
+		}
+		selectDateForceFreezeUserMap, err = models.SysUserWalletForceFreezeRecordDal.SumFreezeGroupByUserAndTimeRange(c, userIds, selectStartTime, selectEndTime)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			klog.Errorf("YopTestUserList SumFreezeGroupByUserAndTimeRange err: %v", err)
 		}
 	}
 
@@ -412,6 +435,12 @@ func YopTestUserList(c *gin.Context) {
 			}
 			list[i].ForceFreeze = ff
 			totalForceFreeze += ff
+		}
+
+		if len(req.StartTime) > 0 && len(req.EndTime) > 0 {
+			if userFreeze, ok := selectDateForceFreezeUserMap[list[i].UserId]; ok {
+				list[i].UserSelectDateForceFreeze = userFreeze
+			}
 		}
 	}
 

@@ -18,6 +18,7 @@ type HdYopTestUser struct {
 	RealName    string       `gorm:"column:real_name;type:varchar(32);comment:帐号实名;NOT NULL" json:"real_name"`
 	UserType    int          `gorm:"column:user_type;type:tinyint(4);default:0;comment:账号类型 1实名账号 2测试账号;NOT NULL" json:"user_type"`
 	Rate        int          `gorm:"column:rate;type:int(11);default:0;comment:分成比例;NOT NULL" json:"rate"`
+	FreezeRate  int          `gorm:"column:freeze_rate;type:int(11);default:0;comment:到账冻结比例;NOT NULL" json:"freeze_rate"`
 	TotalIncome float64      `gorm:"column:total_income;type:decimal(10,2);default:0.00;comment:累计进账;NOT NULL" json:"total_income"`
 	Remark      string       `gorm:"column:remark;type:varchar(255);comment:备注;NOT NULL" json:"remark"`
 	CountTime   sql.NullTime `gorm:"column:count_time;type:datetime;comment:上次进账统计时间" json:"count_time"`
