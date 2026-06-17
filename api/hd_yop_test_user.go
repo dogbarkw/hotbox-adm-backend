@@ -384,6 +384,15 @@ func YopTestUserList(c *gin.Context) {
 		}
 	}
 
+	var selectDateForceFreezeSum int64
+	if len(req.StartTime) > 0 && len(req.EndTime) > 0 {
+		selectDateForceFreezeSum, err = models.SysUserWalletForceFreezeRecordDal.SumFreezeByUserIdsAndTimeRange(c, userIds, selectStartTime, selectEndTime)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			klog.Errorf("YopTestUserList SumFreezeByUserIdsAndTimeRange err: %v", err)
+		}
+	}
+
+	var totalForceFreeze int64
 	for i := range list {
 		income, ok := userIncomeMap[list[i].Id]
 		if ok {
@@ -402,6 +411,7 @@ func YopTestUserList(c *gin.Context) {
 				ff = -ff
 			}
 			list[i].ForceFreeze = ff
+			totalForceFreeze += ff
 		}
 	}
 
@@ -415,6 +425,8 @@ func YopTestUserList(c *gin.Context) {
 		"all":                      total,
 		"daily_all":                todayIncome,
 		"select_total_date_income": selectTotalDateIncome,
+		"total_force_freeze":       totalForceFreeze,
+		"select_date_force_freeze": selectDateForceFreezeSum,
 	})
 }
 
