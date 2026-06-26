@@ -32,3 +32,17 @@ type OperateRecord struct {
 func (o OperateRecord) CreateRecord(t AiMatchBackendOperateRecord) error {
 	return cli.HotDogGormDB.WithContext(o.Ctx).Save(&t).Error
 }
+
+// GetLatestByAssociateIdAndScenes 根据associate_id和scenes获取最新一条记录
+func (o OperateRecord) GetLatestByAssociateIdAndScenes(associateId uint64, scenes int64) (record *AiMatchBackendOperateRecord, err error) {
+	record = &AiMatchBackendOperateRecord{}
+	err = cli.HotDogGormDB.WithContext(o.Ctx).Model(&AiMatchBackendOperateRecord{}).
+		Where("associate_id = ?", associateId).
+		Where("scenes = ?", scenes).
+		Order("id DESC").
+		First(record).Error
+	if err != nil {
+		return nil, err
+	}
+	return
+}

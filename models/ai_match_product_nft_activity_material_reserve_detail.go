@@ -97,7 +97,9 @@ func (*AiMatchProductNftActivityMaterialReserveDetail) UpdateByParams(where, pay
 
 type GetJoinMainWithParamsItem struct {
 	AiMatchProductNftActivityMaterialReserveDetail
-	ExecTime int64
+	ExecTime     int64 `json:"exec_time"`     // 预计执行时间
+	ExecEndTime  int64 `json:"exec_end_time"` // 实际结束时间（用于判断是否缓慢执行）
+	ActivityType int   `json:"activity_type"` // 活动类型
 }
 
 func (m *AiMatchProductNftActivityMaterialReserveDetail) GetJoinMainWithParams(where map[string]any) (result []GetJoinMainWithParamsItem, err error) {
@@ -105,7 +107,7 @@ func (m *AiMatchProductNftActivityMaterialReserveDetail) GetJoinMainWithParams(w
 	for k, v := range where {
 		query.Where(k, v)
 	}
-	err = query.Select("ai_match_product_nft_activity_material_reserve_detail.*, r.exec_time").
+	err = query.Select("ai_match_product_nft_activity_material_reserve_detail.*, r.exec_time, r.exec_end_time, r.activity_type").
 		Joins(`
 		INNER JOIN
 		ai_match_product_nft_activity_material_reserve r 

@@ -96,7 +96,7 @@ func GetNftDisplaceMaterialReserveTask(c *gin.Context) {
 			switch vv.MaterialType {
 			case "nft", "product":
 				// 获取藏品所有任务
-				taskList, err := getProductAllReverseTask(vv.ProductId, vv.ProductSizeId)
+				taskList, err := getProductAllReverseTask(c, vv.ProductId, vv.ProductSizeId)
 				if err != nil {
 					return err
 				}
@@ -214,7 +214,7 @@ func UpdateNftDisplaceMaterialReserveTask(c *gin.Context) {
 	failMaterialNameList := make([]string, 0)
 	mp := make(map[string]int)
 	for _, v := range req.Materials {
-		ok, err := checkNftDisplaceMaterialReserveTaskMaterial(mp, req.DisplaceId, req.ActivityType, v)
+		ok, err := checkNftDisplaceMaterialReserveTaskMaterial(c, mp, req.DisplaceId, req.ActivityType, v)
 		if err != nil {
 			response.ResponseFail(err.Error())
 			return
@@ -297,11 +297,11 @@ func UpdateNftDisplaceMaterialReserveTask(c *gin.Context) {
 }
 
 // 查询每个材料是否够扣，countMap的value是材料的剩余可扣除数量
-func checkNftDisplaceMaterialReserveTaskMaterial(countMap map[string]int, activityId, activityType int64, req dto.DisplaceMaterialReserveMaterialInfo) (ok bool, err error) {
+func checkNftDisplaceMaterialReserveTaskMaterial(c *gin.Context, countMap map[string]int, activityId, activityType int64, req dto.DisplaceMaterialReserveMaterialInfo) (ok bool, err error) {
 	reserveMaterialTotalNum := int64(0) // 本次要预留的份数 + 其他任务要预留的份数
 	if lo.Contains([]string{"nft", "product"}, req.MaterialType) {
 		// 现有任务的预留数量
-		taskNums, err := getCombMaterialReserveOtherTaskTotal(activityId, req.ProductId, req.ProductSizeId, int(activityType))
+		taskNums, err := getCombMaterialReserveOtherTaskTotal(c, activityId, req.ProductId, req.ProductSizeId, int(activityType))
 		if err != nil {
 			return false, err
 		}

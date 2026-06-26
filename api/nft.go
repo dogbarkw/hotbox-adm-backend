@@ -90,9 +90,18 @@ func NftSecondPriceList(c *gin.Context) {
 		// 查询藏品预留数量
 		taskList := make([]dto.ProductNftSecondPriceJoinSaleCalendarReserveTask, 0)
 		if v.CountResetTime != "0" && v.CountResetValue != 0 {
+			operateRecord, err := models.OperateRecord{Ctx: c}.GetLatestByAssociateIdAndScenes(v.Id, 1)
+			operatorName := ""
+			if err == nil && operateRecord != nil {
+				operatorName = operateRecord.Username
+			}
 			taskList = append(taskList, dto.ProductNftSecondPriceJoinSaleCalendarReserveTask{
-				ExecTime:   cast.ToInt64(v.CountResetTime),
-				ReserveNum: int64(v.CountResetValue),
+				ExecTime:     cast.ToInt64(v.CountResetTime),
+				ReserveNum:   int64(v.CountResetValue),
+				TaskSource:   1,            // 1=手动
+				ActivityType: 0,            // 手动任务无活动类型
+				ActivityId:   0,            // 手动任务无活动ID
+				OperatorName: operatorName, // 操作人昵称（从操作日志表查询）
 			})
 		}
 		list, tempErr := models.ActivityMaterialReserveDetailDal.GetJoinMainWithParams(map[string]any{
@@ -109,8 +118,12 @@ func NftSecondPriceList(c *gin.Context) {
 		}
 		for _, d := range list {
 			taskList = append(taskList, dto.ProductNftSecondPriceJoinSaleCalendarReserveTask{
-				ExecTime:   d.ExecTime,
-				ReserveNum: d.ReserveNum,
+				ExecTime:     d.ExecTime,
+				ReserveNum:   d.ReserveNum,
+				TaskSource:   2,              // 2=活动
+				ActivityType: d.ActivityType, // 活动类型 1=合成 3=置换 4=分解
+				ActivityId:   d.ActivityId,   // 活动ID
+				OperatorName: "",             // 活动任务无操作人
 			})
 		}
 		newRes.TaskList = taskList

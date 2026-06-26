@@ -97,6 +97,8 @@ type MaterialReserveMaterialTaskInfo struct {
 	ActivityType int   `json:"activity_type"`
 	IsCountReset bool  `json:"is_count_reset"` // 是否定时更新库存
 	ActivityId   int64 `json:"activity_id"`
+	TaskSource   int    `json:"task_source"`    // 任务来源 1=手动 2=活动
+	OperatorName string `json:"operator_name"`  // 操作人昵称（仅手动任务）
 	ExecTime     int64 `json:"exec_time"`
 	ReserveNum   int64 `json:"reserve_num"` // 预留份数
 }

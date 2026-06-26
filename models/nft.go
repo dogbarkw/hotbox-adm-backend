@@ -98,7 +98,7 @@ func (n Nft) NftProductPriceList(req form.SecondPriceListReq) (res []*dto.Produc
 	if req.PageSize != 0 && req.PageNumber != 0 {
 		query.Offset((int(req.PageNumber) - 1) * int(req.PageSize)).Limit(int(req.PageSize))
 	}
-	err = query.Order("ai_match_product_nft_second_price.active_time desc").Scan(&res).Error
+	err = query.Order("ai_match_product_nft_second_price.create_time desc").Scan(&res).Error
 	if err != nil {
 		klog.Errorf("NftProductPriceList query list error: %v", err)
 		return nil, 0, err

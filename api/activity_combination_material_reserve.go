@@ -91,7 +91,7 @@ func GetNftCombinationMaterialReserveTask(c *gin.Context) {
 			switch vv.MaterialType {
 			case "nft", "product":
 				// 获取藏品所有任务
-				taskList, err := getProductAllReverseTask(vv.ProductId, vv.ProductSizeId)
+				taskList, err := getProductAllReverseTask(c, vv.ProductId, vv.ProductSizeId)
 				if err != nil {
 					return err
 				}
@@ -270,7 +270,7 @@ func UpdateNftCombinationMaterialReserveTask(c *gin.Context) {
 	mp := make(map[string]int)
 	for _, v := range req.MaterialGroups {
 		for _, vv := range v.MaterialInfos {
-			ok, err := checkNftCombinationMaterialReserveTaskMaterial(mp, req.CombinationId, vv)
+			ok, err := checkNftCombinationMaterialReserveTaskMaterial(c, mp, req.CombinationId, vv)
 			if err != nil {
 				_ = httpReq.FeiShuDebugRootBot(fmt.Sprintf("[UpdateNftCombinationMaterialReserveTask] checkNftCombinationMaterialReserveTaskMaterial, comb_id:%d, err: %v", req.CombinationId, err))
 				response.ResponseFail(err.Error())
@@ -452,11 +452,11 @@ func DeleteNftCombinationMaterialReserveTask(c *gin.Context) {
 }
 
 // 查询每个材料是否够扣，countMap的value是材料的剩余可扣除数量
-func checkNftCombinationMaterialReserveTaskMaterial(countMap map[string]int, combId int64, req dto.CombinationMaterialReserveMaterialInfo) (ok bool, err error) {
+func checkNftCombinationMaterialReserveTaskMaterial(c *gin.Context, countMap map[string]int, combId int64, req dto.CombinationMaterialReserveMaterialInfo) (ok bool, err error) {
 	reserveMaterialTotalNum := int64(0) // 本次要预留的份数 + 其他任务要预留的份数
 	if req.MaterialType == "nft" {
 		// 现有任务的预留数量
-		taskNums, err := getCombMaterialReserveOtherTaskTotal(combId, req.ProductId, req.ProductSizeId, constant.ACTIVITY_TYPE_COMBINATION)
+		taskNums, err := getCombMaterialReserveOtherTaskTotal(c, combId, req.ProductId, req.ProductSizeId, constant.ACTIVITY_TYPE_COMBINATION)
 		if err != nil {
 			return false, err
 		}
@@ -494,9 +494,9 @@ func checkNftCombinationMaterialReserveTaskMaterial(countMap map[string]int, com
 }
 
 // 查询这个活动之外已预留的藏品数量
-func getCombMaterialReserveOtherTaskTotal(activityId int64, productId, productSizeId uint64, activityType int) (num int64, err error) {
+func getCombMaterialReserveOtherTaskTotal(c *gin.Context, activityId int64, productId, productSizeId uint64, activityType int) (num int64, err error) {
 	// 获取总数
-	allTask, err := getProductAllReverseTask(productId, productSizeId)
+	allTask, err := getProductAllReverseTask(c, productId, productSizeId)
 	if err != nil {
 		return 0, err
 	}
@@ -732,7 +732,7 @@ func CalculateNftCombinationMaterialReserveTask(c *gin.Context) {
 	response.ResponseSuccess(req)
 }
 
-func getProductAllReverseTask(productId, productSizeId uint64) (result []dto.MaterialReserveMaterialTaskInfo, err error) {
+func getProductAllReverseTask(c *gin.Context, productId, productSizeId uint64) (result []dto.MaterialReserveMaterialTaskInfo, err error) {
 	// 查询预留任务
 	list, err := models.ActivityMaterialReserveDetailDal.GetJoinMainWithParams(map[string]any{
 		"product_id":      productId,
@@ -750,6 +750,8 @@ func getProductAllReverseTask(productId, productSizeId uint64) (result []dto.Mat
 			ReserveNum:   dl.ReserveNum,
 			ActivityId:   dl.ActivityId,
 			IsCountReset: false,
+			TaskSource:   2,  // 2=活动
+			OperatorName: "", // 活动任务无操作人
 		})
 	}
 	// 藏品数量定时变更
@@ -758,7 +760,7 @@ func getProductAllReverseTask(productId, productSizeId uint64) (result []dto.Mat
 		NftProductSizeId: int(productSizeId),
 		OnSaleStatus:     -1,
 	}
-	priceList, _, err := models.Nft{Ctx: &gin.Context{}}.NftProductPriceList(req)
+	priceList, _, err := models.Nft{Ctx: c}.NftProductPriceList(req)
 	if err != nil {
 		return
 	}
@@ -766,11 +768,19 @@ func getProductAllReverseTask(productId, productSizeId uint64) (result []dto.Mat
 		item := priceList[0]
 		execTime := cast.ToInt64(item.CountResetTime)
 		if execTime > 0 {
+			// 通过 associate_id 和 scenes=1 查询操作日志获取操作人
+			operateRecord, _ := models.OperateRecord{Ctx: c}.GetLatestByAssociateIdAndScenes(item.Id, 1)
+			operatorName := ""
+			if operateRecord != nil {
+				operatorName = operateRecord.Username
+			}
 			// 如果是定时更新库存， 活动id、活动类型都为0
 			result = append(result, dto.MaterialReserveMaterialTaskInfo{
 				ExecTime:     execTime,
 				ReserveNum:   int64(item.CountResetValue),
 				IsCountReset: true,
+			TaskSource:   1,            // 1=手动
+			OperatorName: operatorName, // 操作人昵称（从操作日志表查询）
 			})
 		}
 	}
