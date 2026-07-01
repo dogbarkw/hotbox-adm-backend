@@ -14,6 +14,8 @@ type HdYopTestUserRateRecord struct {
 	Id            uint64    `gorm:"column:id;type:bigint(20) unsigned;primary_key;AUTO_INCREMENT;comment:主键 ID" json:"id"`
 	YopTestUserId int64     `gorm:"column:yop_test_user_id;type:bigint(20);default:0;comment:特殊账号ID;NOT NULL" json:"yop_test_user_id"`
 	Rate          int       `gorm:"column:rate;type:int(11);default:0;comment:分成比例;NOT NULL" json:"rate"`
+	MainId        int64     `gorm:"column:main_id;type:bigint(20);default:0;comment:大分区ID;NOT NULL" json:"main_id"`
+	ChildId       int64     `gorm:"column:child_id;type:bigint(20);default:0;comment:小分区ID;NOT NULL" json:"child_id"`
 	CreatedAt     time.Time `gorm:"column:created_at;type:datetime;default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt     time.Time `gorm:"column:updated_at;type:datetime;default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
