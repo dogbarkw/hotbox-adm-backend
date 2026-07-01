@@ -93,3 +93,14 @@ func GetStartAndEndOfDay(t time.Time) (start, end time.Time) {
 	end = start.Add(24 * time.Hour).Add(-1 * time.Nanosecond)
 	return start, end
 }
+
+// 获取当前周一～周日
+func GetWeekRange() (time.Time, time.Time) {
+	now := time.Now()
+	// 获取本周的周一，Go 默认星期天是一周的第一天，因此我们需要调整
+
+	weekStart := now.AddDate(0, 0, -int(now.Weekday()-1))
+	// 本周的周日是周一加上6天
+	weekEnd := weekStart.AddDate(0, 0, 6)
+	return weekStart, weekEnd
+}
