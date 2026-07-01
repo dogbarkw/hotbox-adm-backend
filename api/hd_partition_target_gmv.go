@@ -66,7 +66,7 @@ func TargetGmvList(c *gin.Context) {
 
 	// 获取全局量化配比（不再按分区）
 	globalRatio, err := hd_task_models.HdPartitionGmvQuantRatioDal.GetByPartitionId(c, 0, 0)
-	if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		logrus.Error(err)
 		response.ResponseFail(err.Error())
 		return
@@ -111,10 +111,7 @@ func TargetGmvList(c *gin.Context) {
 				data.WeeklyIncome = weekStat.WeeklyShareIncome
 			}
 		}
-		quantRatio, ok2 := quantRatioMap[fmt.Sprintf("%d-%d", datum.MainId, datum.ChildId)]
-		if ok2 {
-			data.QuantRatio = quantRatio.QuantRatio
-		}
+		data.QuantRatio = globalRatio.QuantRatio
 		dataList = append(dataList, data)
 	}
 	response.ResponseSuccess(dataList)
