@@ -45,7 +45,7 @@ func main() {
 			c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(cornJob.NewDailyGmvCornJob()))      // 统计GMV
 			c.AddJob("0 0 2 * * *", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(cornJob.NewPreDailyGmvCornJob())) // 统计前日GMV
 			c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(cornJob.NewYopTestUserJob()))       // 特殊账号累计进账
-			c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(target_gmv.NewDgTargetGmvCornJob())) // 目标gmv统计
+			// c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(target_gmv.NewDgTargetGmvCornJob())) // 目标gmv统计
 
 			c.Start()
 			select {}

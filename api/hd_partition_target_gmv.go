@@ -64,8 +64,8 @@ func TargetGmvList(c *gin.Context) {
 		return
 	}
 
-	// 获取量化配比
-	quantRatioMap, err := hd_task_models.HdPartitionGmvQuantRatioDal.GetByPartitionIds(c, partitionIds)
+	// 获取全局量化配比（不再按分区）
+	globalRatio, err := hd_task_models.HdPartitionGmvQuantRatioDal.GetByPartitionId(c, 0, 0)
 	if err != nil {
 		logrus.Error(err)
 		response.ResponseFail(err.Error())
@@ -118,6 +118,27 @@ func TargetGmvList(c *gin.Context) {
 		dataList = append(dataList, data)
 	}
 	response.ResponseSuccess(dataList)
+}
+
+// @Summary 获取全局量化配比
+// @Description 获取全局量化配比
+// @Tags GMV目标
+// @Accept application/json
+// @Produce application/json
+// @Param Authorization header string false "Bearer 用户令牌"
+// @Success 200 {object} any
+// @Router /target_gmv/quant_ratio/info [post]
+func GetTargetGmvQuantRatio(c *gin.Context) {
+	response := until.NewResponse(c)
+	quantRatio, err := hd_task_models.HdPartitionGmvQuantRatioDal.GetByPartitionId(c, 0, 0)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		logrus.Error(err)
+		response.ResponseFail(err.Error())
+		return
+	}
+	response.ResponseSuccess(gin.H{
+		"quant_ratio": quantRatio.QuantRatio,
+	})
 }
 
 // @Summary 修改GMV目标
@@ -358,7 +379,7 @@ func UpdateTargetGmvQuantRatio(c *gin.Context) {
 	err := models.OperateRecord{Ctx: c}.CreateRecord(models.AiMatchBackendOperateRecord{
 		UserId:      cast.ToInt64(operatorId),
 		Username:    c.GetString("adm_user_name"),
-		Remark:      fmt.Sprintf("修改量化配比倍数为%.2f,分区%d-%d", req.QuantRatio, req.MainId, req.ChildId),
+		Remark:      fmt.Sprintf("修改量化配比倍数为%.2f", req.QuantRatio),
 		Scenes:      constant.OPERATE_PARTITION_TARGET_GMV,
 		AssociateId: 0,
 		RequestData: string(jsonStr),
@@ -369,8 +390,8 @@ func UpdateTargetGmvQuantRatio(c *gin.Context) {
 		return
 	}
 
-	// 更新或创建量化配比，保留两位小数
-	err = hd_task_models.HdPartitionGmvQuantRatioDal.Upsert(c, req.MainId, req.ChildId, decimal.NewFromFloat(req.QuantRatio).Round(2).InexactFloat64())
+	// 更新或创建全局量化配比，保留两位小数，main_id、child_id 固定为 0
+	err = hd_task_models.HdPartitionGmvQuantRatioDal.Upsert(c, 0, 0, decimal.NewFromFloat(req.QuantRatio).Round(2).InexactFloat64())
 	if err != nil {
 		logrus.Error(err)
 		response.ResponseFail(err.Error())

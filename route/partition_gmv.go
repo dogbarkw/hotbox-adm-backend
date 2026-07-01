@@ -25,6 +25,7 @@ func RegisterPartitionGmvRouters(r *gin.Engine) {
 		rivalTradeTask.POST("/list", api.TargetGmvList)
 		rivalTradeTask.POST("/update", api.UpdateTargetGmv)
 		rivalTradeTask.POST("/switch", api.TargetGmvSwitch)
+		rivalTradeTask.POST("/quant_ratio/info", api.GetTargetGmvQuantRatio)
 		rivalTradeTask.POST("/quant_ratio/update", api.UpdateTargetGmvQuantRatio)
 	}
 }
