@@ -2,6 +2,8 @@ package models
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"hotbox-adm-backend/dto"
@@ -194,6 +196,73 @@ WITH t1 AS (
 )SELECT * FROM res
 `
 	err = cli.HotDogGormDB.WithContext(ctx).Raw(sql, startTime, endTime, startTime, endTime).Find(&res).Error
+	return
+}
+
+func (n AiMatchProductOrder) GetNftCategoryDailyGMV(startTime string, endTime string, testUserIds []string) (res []dto.NftCategoryGmvData, err error) {
+	dgUids := ""
+	dgUids = strings.Join(testUserIds, ",")
+	if dgUids == "" {
+		dgUids = "0" // 填充默认值，避免sql报错
+	}
+	sql := fmt.Sprintf(`
+with t1 as(
+    select user_id
+    from sys_user
+    where user_id in (%s)
+), t2 as (
+    select a.product_id, a.nft_product_size_id, a.product_title,concat('竞价区',name) category_path
+    from candy_nft_category_content a
+             join (select * from candy_nft_category where is_delete = 0 and is_show = 1 and id not in (19)) b on a.category_id = b.id
+             JOIN ai_match_product_nft_second_price c ON a.product_id = c.product_id and a.nft_product_size_id = c.nft_product_size_id
+             JOIN sale_calendar_product AS d ON d.id = a.product_id
+    where a.on_sale_status = 1
+      and a.deleted_at = 0
+      and c.on_sale_status = 1
+      and c.is_delete = 0
+      and from_unixtime(c.second_sale_time/1000) <= now()
+      and d.is_delete = 0
+      and d.is_test = 0
+      and d.on_sale_status = 1
+      and is_business = 2
+      and a.product_title not in (select nft_name from collection_center_option where is_delete = 0 and is_on_sale_show = 2)
+), t3 as(
+    select date(a.payment_time) dt,IFNULL(t2.category_path,b.category_path) category_path,sum(pay_amount) gmv,count(distinct user_id) user_cnt
+    from ai_match_product_order a left join (select * from ai_match_nft_category_tab where category_type <> 0 and on_sale_status = 1) b on a.product_id = b.product_id and a.nft_product_size_id = b.nft_product_size_id
+        left join t2 on a.product_id = t2.product_id and a.nft_product_size_id = t2.nft_product_size_id
+    where is_delete = 0 and status in  (2, 86, 99, 15, 76, 67, 36) and product_type = 'NFT_SE'
+      and payment_time >= ? AND payment_time <= ? and pay_type <> 0   and user_id not in (select * from t1)
+    group by IFNULL(t2.category_path,b.category_path),date(a.payment_time)
+), t4 as (
+    select if(child_id = 0,main_id,concat(main_id,',',child_id)) category_path,concat(main_title,child_title) name
+    from partition_data
+    where is_delete = 0
+), t5 as (
+    select dt,t3.category_path,if(name is null,if(name is null and t3.category_path like '竞价区%%',t3.category_path,'其他'),name) name,gmv,user_cnt
+    from t3 left join t4 on t3.category_path = t4.category_path
+), t6 as (
+    select ifnull(category_path, "") as category_path,name category,sum(gmv)gmv,dt,sum(user_cnt) user_cnt,row_number() over (partition by dt order by sum(gmv) desc ) rk
+    from t5
+    group by dt,name
+)
+select * from t6
+order by dt,rk;
+`, dgUids)
+	rows, err := cli.HotDogADBGormDB.Query(sql, startTime, endTime)
+	if err != nil {
+		return res, err
+	}
+	defer rows.Close()
+
+	res = make([]dto.NftCategoryGmvData, 0)
+	for rows.Next() {
+		gmvData := dto.NftCategoryGmvData{}
+		err := rows.Scan(&gmvData.CategoryPath, &gmvData.Category, &gmvData.Gmv, &gmvData.Dt, &gmvData.UserCnt, &gmvData.Rk)
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, gmvData)
+	}
 	return
 }
 

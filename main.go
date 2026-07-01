@@ -7,6 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"hotbox-adm-backend/cli"
+	"hotbox-adm-backend/corn/target_gmv"
 	cornJob "hotbox-adm-backend/corn"
 	"hotbox-adm-backend/route"
 
@@ -21,7 +22,7 @@ func init() {
 	cli.InitHDGormDB()
 	cli.InitHDTaskDB()
 	cli.InitHDRedis()
-	// cli.InitHDADBGormDB()
+	cli.InitHDADBGormDB()
 	cli.InitSpecialUserIds()
 
 	if os.Getenv("PORT") != "" {
@@ -44,6 +45,7 @@ func main() {
 			c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(cornJob.NewDailyGmvCornJob()))      // 统计GMV
 			c.AddJob("0 0 2 * * *", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(cornJob.NewPreDailyGmvCornJob())) // 统计前日GMV
 			c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(cornJob.NewYopTestUserJob()))       // 特殊账号累计进账
+			c.AddJob("@every 5m", cron.NewChain(cron.Recover(cron.DefaultLogger)).Then(target_gmv.NewDgTargetGmvCornJob())) // 目标gmv统计
 
 			c.Start()
 			select {}
@@ -55,5 +57,6 @@ func main() {
 	// route.RegisterGptRouters(router)
 	// route.RegisterActivityScoreRouters(router)
 	route.RegisterYopTestUserRouters(router)
+	route.RegisterPartitionGmvRouters(router)
 	router.Run(port)
 }

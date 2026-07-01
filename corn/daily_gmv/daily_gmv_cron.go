@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"hotbox-adm-backend/corn/target_gmv"
+
 	"hotbox-adm-backend/pkg/constant"
 
 	"hotbox-adm-backend/internal/httpReq"
@@ -24,6 +26,11 @@ func (p *DailyGmvCornJob) Run() {
 	endTime := time.Now().Format(time.DateTime)
 	ctx := context.Background()
 	StartStatGmv(ctx, startTime, endTime)
+	StartStatNftCategoryGmv(ctx, startTime, endTime)
+	if err := target_gmv.NewDgTargetGmvCornJob().StartUpdateDailyGmv(ctx, time.Now()); err != nil {
+		logrus.Error(err.Error())
+		httpReq.FeiShuWithUrlRootBot(constant.FEI_SHU_GMV_URL, "更新分区gmv失败", err.Error())
+	}
 }
 
 // 统计前一天的数据
@@ -35,6 +42,21 @@ func (p *DailyBeforeGmvCornJob) Run() {
 	endTime := fmt.Sprintf("%s 23:59:59.999", dayBefore.Format(time.DateOnly))
 	ctx := context.Background()
 	StartStatGmv(ctx, startTime, endTime)
+	StartStatNftCategoryGmv(ctx, startTime, endTime)
+
+	c := target_gmv.NewDgTargetGmvCornJob()
+	if err := c.StartStatPartitionIncome(ctx, dayBefore); err != nil {
+		logrus.Error(err.Error())
+		httpReq.FeiShuWithUrlRootBot(constant.FEI_SHU_GMV_URL, "统计分区进账失败", err.Error())
+	}
+	if err := c.StartUpdateDailyGmv(ctx, dayBefore); err != nil {
+		logrus.Error(err.Error())
+		httpReq.FeiShuWithUrlRootBot(constant.FEI_SHU_GMV_URL, "更新分区gmv失败", err.Error())
+	}
+	if err := c.GenNewDateTargetGmv(ctx); err != nil {
+		logrus.Error(err.Error())
+		httpReq.FeiShuWithUrlRootBot(constant.FEI_SHU_GMV_URL, "生成新的一天的目标gmv失败", err.Error())
+	}
 }
 
 func StartStatGmv(ctx context.Context, startTime string, endTime string) {

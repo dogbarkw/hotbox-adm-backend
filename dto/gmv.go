@@ -20,3 +20,12 @@ type GmvResponse struct {
 	TotalGmv float64                     `json:"total_gmv"`
 	Profit   float64                     `json:"profit"`
 }
+
+type NftCategoryGmvData struct {
+	Dt           time.Time `json:"dt"`
+	Gmv          float64   `json:"gmv"`
+	UserCnt      uint      `json:"user_cnt"`
+	CategoryPath string    `json:"category_path"`
+	Category     string    `json:"category"`
+	Rk           uint      `json:"rk"`
+}
