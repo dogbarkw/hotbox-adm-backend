@@ -23,7 +23,7 @@ type HdDailyNftCategoryGmv struct {
 }
 
 func (m *HdDailyNftCategoryGmv) TableName() string {
-	return "hotbox_hd_daily_nft_category_gmv"
+	return "hotbox_daily_nft_category_gmv"
 }
 
 func (m *HdDailyNftCategoryGmv) FirstOrCreate(ctx context.Context, payload HdDailyNftCategoryGmv) (int64, error) {

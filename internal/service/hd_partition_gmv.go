@@ -154,7 +154,7 @@ func (s *HdPartitionGmvSrv) RefreshUserRate(ctx context.Context, yopTestUserid i
 		return err
 	}
 
-	hdYopTestUserCacheKey := fmt.Sprintf("cardmart:yop_divide_test_user:%d", testUser.UserId)
+	hdYopTestUserCacheKey := fmt.Sprintf("hotbox:yop_divide_test_user:%d", testUser.UserId)
 	cli.HotDogRedis.Set(ctx, hdYopTestUserCacheKey, testUser.Rate, 0)
 
 	// 设置冻结比例缓存
