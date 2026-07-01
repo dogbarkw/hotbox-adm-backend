@@ -7,7 +7,6 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"hotbox-adm-backend/cli"
-	"hotbox-adm-backend/corn/target_gmv"
 	cornJob "hotbox-adm-backend/corn"
 	"hotbox-adm-backend/route"
 
