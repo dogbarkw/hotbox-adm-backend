@@ -14,7 +14,7 @@ import (
 
 func RegisterPartitionGmvRouters(r *gin.Engine) {
 	r.Use(until.CORS())
-	cardmartV2 := r.Group("/hotbox/v2/operation", until.GTokenChk())
+	cardmartV2 := r.Group("/hotbox/v2/operation", until.LoginChk())
 	if os.Getenv("ENV") == "dev" {
 		// 本地环境不验token
 		cardmartV2 = r.Group("/hotbox/v2/operation")
