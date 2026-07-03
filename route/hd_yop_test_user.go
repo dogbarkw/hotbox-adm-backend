@@ -31,5 +31,6 @@ func RegisterYopTestUserRouters(r *gin.Engine) {
 
 		yopTestUser.POST("/stat/list", api.YopTestUserStatList)
 		yopTestUser.POST("/stat/detail", api.YopTestUserStatDetail)
+		yopTestUser.POST("/export", api.YopTestUserExport)
 	}
 }

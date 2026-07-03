@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"hotbox-adm-backend/util"
 
 	"github.com/jinzhu/copier"
+	"github.com/xuri/excelize/v2"
 	"golang.org/x/sync/errgroup"
 
 	"hotbox-adm-backend/cli"
@@ -374,10 +376,13 @@ func YopTestUserList(c *gin.Context) {
 
 	type YopTestUserData struct {
 		hd_task_models.HdYopTestUser
-		DailyIncome      float64 `json:"daily_income"`
-		SelectDateIncome float64 `json:"select_date_income"`
-		ForceFreeze                int64   `json:"force_freeze"`
-		UserSelectDateForceFreeze  int64   `json:"user_select_date_force_freeze"`
+		DailyIncome               float64 `json:"daily_income"`
+		SelectDateIncome          float64 `json:"select_date_income"`
+		ForceFreeze               int64   `json:"force_freeze"`
+		UserSelectDateForceFreeze int64   `json:"user_select_date_force_freeze"`
+		TotalBalance              float64 `json:"total_balance"`     // 总金额（含冻结）
+		WalletFreezeBalance       float64 `json:"freeze_balance"`    // 冻结金额（负数）
+		AvailableBalance          float64 `json:"available_balance"` // 可用金额 = total + freeze
 	}
 	list := make([]YopTestUserData, 0, len(data))
 	err = copier.Copy(&list, &data)
@@ -392,6 +397,7 @@ func YopTestUserList(c *gin.Context) {
 		userIds = append(userIds, v.UserId)
 	}
 	forceFreezeMap := make(map[int64]int64)
+	walletMap := make(map[int64]models.SysUserWallet)
 	if len(userIds) > 0 {
 		wallets, err := models.SysUserWalletDal.GetUserWallets(c, userIds)
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -399,6 +405,7 @@ func YopTestUserList(c *gin.Context) {
 		}
 		for _, w := range wallets {
 			forceFreezeMap[w.UserId] = w.ForceFreeze
+			walletMap[w.UserId] = w
 		}
 	}
 
@@ -435,6 +442,16 @@ func YopTestUserList(c *gin.Context) {
 			}
 			list[i].ForceFreeze = ff
 			totalForceFreeze += ff
+		}
+
+		if w, ok := walletMap[list[i].UserId]; ok {
+			list[i].TotalBalance = w.TotalBalance
+			fb := w.FreezeBalance
+			if fb < 0 {
+				fb = -fb
+			}
+			list[i].WalletFreezeBalance = fb
+			list[i].AvailableBalance = math.Round((w.TotalBalance+w.FreezeBalance)*100) / 100
 		}
 
 		if len(req.StartTime) > 0 && len(req.EndTime) > 0 {
@@ -522,4 +539,205 @@ func YopTestUserBalance(c *gin.Context) {
 		return
 	}
 	response.ResponseSuccess(user)
+}
+
+// @Summary 导出特殊账号列表
+// @Description 导出特殊账号列表为 Excel
+// @Tags 特殊账号管理
+// @Accept application/json
+// @Produce application/octet-stream
+// @Param Authorization header string false "Bearer 用户令牌"
+// @Param object query form.YopTestUserListReq true "查询参数"
+// @Success 200 {file} file
+// @Router /yop_test_user/export [post]
+func YopTestUserExport(c *gin.Context) {
+	req := form.YopTestUserListReq{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(200, gin.H{"code": errno.Error, "msg": err.Error()})
+		return
+	}
+
+	// 解析时间范围
+	var (
+		selectStartTime time.Time
+		selectEndTime   time.Time
+		err             error
+	)
+	if len(req.StartTime) > 0 {
+		selectStartTime, err = time.ParseInLocation(util.StandardFormat, req.StartTime, time.Local)
+		if err != nil {
+			c.JSON(200, gin.H{"code": errno.Error, "msg": "开始时间格式错误"})
+			return
+		}
+	} else {
+		selectStartTime = time.Now()
+	}
+	if len(req.EndTime) > 0 {
+		selectEndTime, err = time.ParseInLocation(util.StandardFormat, req.EndTime, time.Local)
+		if err != nil {
+			c.JSON(200, gin.H{"code": errno.Error, "msg": "结束时间格式错误"})
+			return
+		}
+	} else {
+		selectEndTime = time.Now()
+	}
+	start, end := util.GetStartAndEndOfDay(time.Now().Local())
+
+	// 获取所有用户
+	where := map[string][]any{}
+	if req.Mobile != "" {
+		where["mobile"] = []any{req.Mobile}
+	}
+	data, _, err := hd_task_models.HdYopTestUserDal.GetList(c, where, []string{"id desc"}, 1, 0)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(200, gin.H{"code": errno.Error, "msg": err.Error()})
+		return
+	}
+	if len(data) == 0 {
+		c.JSON(200, gin.H{"code": errno.Error, "msg": "没有可导出的数据"})
+		return
+	}
+
+	testUserIds := make([]int64, 0, len(data))
+	userIds := make([]int64, 0, len(data))
+	partitionIds := make([][]any, 0, len(data))
+	for _, v := range data {
+		testUserIds = append(testUserIds, v.Id)
+		userIds = append(userIds, v.UserId)
+		partitionIds = append(partitionIds, []any{v.MainId, v.ChildId})
+	}
+
+	// 获取分区名称
+	partitionMap, _ := models.PartitionDataDal.GetPartitionData(c, partitionIds)
+
+	// 获取钱包余额和强制冻结金额
+	forceFreezeMap := make(map[int64]int64)
+	walletMap := make(map[int64]models.SysUserWallet)
+	if len(userIds) > 0 {
+		wallets, err := models.SysUserWalletDal.GetUserWallets(c, userIds)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			klog.Errorf("YopTestUserExport GetUserWallets err: %v", err)
+		}
+		for _, w := range wallets {
+			forceFreezeMap[w.UserId] = w.ForceFreeze
+			walletMap[w.UserId] = w
+		}
+	}
+
+	// 获取今日进账
+	userIncomeMap, _ := hd_task_models.HdYopTestUserIncomeRecordDal.SumIncomeByTimeRange(c, testUserIds, start, end)
+
+	// 获取筛选日期内进账和冻结金额
+	var (
+		selectDateUserIncomeMap      map[int64]float64
+		selectTotalDateIncome        float64
+		selectDateForceFreezeSum     int64
+		selectDateForceFreezeUserMap map[int64]int64
+	)
+	if len(req.StartTime) > 0 && len(req.EndTime) > 0 {
+		selectDateUserIncomeMap, _ = hd_task_models.HdYopTestUserIncomeRecordDal.SumIncomeByTimeRange(c, testUserIds, selectStartTime, selectEndTime)
+		selectTotalDateIncome, _ = hd_task_models.HdYopTestUserIncomeRecordDal.SumTodayIncome(c, selectStartTime, selectEndTime)
+		selectDateForceFreezeSum, _ = models.SysUserWalletForceFreezeRecordDal.SumFreezeByUserIdsAndTimeRange(c, userIds, selectStartTime, selectEndTime)
+		selectDateForceFreezeUserMap, _ = models.SysUserWalletForceFreezeRecordDal.SumFreezeGroupByUserAndTimeRange(c, userIds, selectStartTime, selectEndTime)
+	}
+
+	// 生成 Excel
+	f := excelize.NewFile()
+	defer f.Close()
+	sheet := "特殊账号列表"
+	f.SetSheetName("Sheet1", sheet)
+
+	// 汇总信息
+	f.SetCellValue(sheet, "A1", "数据筛选开始日期")
+	f.SetCellValue(sheet, "B1", req.StartTime)
+	f.SetCellValue(sheet, "A2", "数据筛选结束日期")
+	f.SetCellValue(sheet, "B2", req.EndTime)
+	f.SetCellValue(sheet, "A3", "平台名称")
+	f.SetCellValue(sheet, "B3", "HOTDOG")
+	f.SetCellValue(sheet, "A4", "筛选日期内合计进账金额")
+	f.SetCellValue(sheet, "B4", selectTotalDateIncome)
+	f.SetCellValue(sheet, "A5", "筛选日期内合计冻结金额")
+	f.SetCellValue(sheet, "B5", selectDateForceFreezeSum)
+
+	// 表头（第7行）
+	headers := []string{
+		"账号实名", "手机号", "所属分区", "账号类型", "备注",
+		"零钱余额", "分成比例", "到账冻结比例", "冻结金额",
+		"累计进账", "今日进账", "筛选日期内进账金额", "筛选日期内冻结金额", "添加时间",
+	}
+	headerRow := 7
+	for i, h := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, headerRow)
+		f.SetCellValue(sheet, cell, h)
+	}
+
+	// 数据行
+	for rowIdx, user := range data {
+		r := rowIdx + headerRow + 1
+
+		userType := "实名账号"
+		if user.UserType == 2 {
+			userType = "测试账号"
+		}
+
+		// 分区名称
+		partitionName := ""
+		if p, ok := partitionMap[fmt.Sprintf("%d-%d", user.MainId, user.ChildId)]; ok {
+			partitionName = fmt.Sprintf("%s/%s", p.MainTitle, p.ChildTitle)
+		}
+
+		// 钱包余额
+		totalBalance := 0.0
+		if w, ok := walletMap[user.UserId]; ok {
+			totalBalance = w.TotalBalance
+		}
+
+		// 强制冻结金额
+		forceFreeze := int64(0)
+		if ff, ok := forceFreezeMap[user.UserId]; ok {
+			if ff < 0 {
+				ff = -ff
+			}
+			forceFreeze = ff
+		}
+
+		// 今日进账
+		dailyIncome := 0.0
+		if inc, ok := userIncomeMap[user.Id]; ok {
+			dailyIncome = inc
+		}
+
+		// 筛选日期内进账
+		selectDateIncome := 0.0
+		if selectDateUserIncomeMap != nil {
+			if inc, ok := selectDateUserIncomeMap[user.Id]; ok {
+				selectDateIncome = inc
+			}
+		}
+
+		// 筛选日期内冻结金额
+		selectDateForceFreeze := int64(0)
+		if selectDateForceFreezeUserMap != nil {
+			if ff, ok := selectDateForceFreezeUserMap[user.UserId]; ok {
+				selectDateForceFreeze = ff
+			}
+		}
+
+		row := []interface{}{
+			user.RealName, user.Mobile, partitionName, userType, user.Remark,
+			totalBalance, user.Rate, user.FreezeRate, forceFreeze,
+			user.TotalIncome, dailyIncome, selectDateIncome, selectDateForceFreeze,
+			user.CreatedAt.Format("2006-01-02 15:04:05"),
+		}
+		for colIdx, val := range row {
+			cell, _ := excelize.CoordinatesToCellName(colIdx+1, r)
+			f.SetCellValue(sheet, cell, val)
+		}
+	}
+
+	filename := fmt.Sprintf("special_account_%s.xlsx", time.Now().Format("20060102_150405"))
+	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	c.Header("Content-Transfer-Encoding", "binary")
+	f.Write(c.Writer)
 }
