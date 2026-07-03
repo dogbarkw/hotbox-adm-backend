@@ -651,13 +651,17 @@ func YopTestUserExport(c *gin.Context) {
 	f.SetCellValue(sheet, "A1", "数据筛选开始日期")
 	f.SetCellValue(sheet, "B1", req.StartTime)
 	f.SetCellValue(sheet, "A2", "数据筛选结束日期")
-	f.SetCellValue(sheet, "B2", req.EndTime)
+	endTimeDisplay := req.EndTime
+	if endTimeDisplay == "" {
+		endTimeDisplay = time.Now().Format(util.StandardFormat)
+	}
+	f.SetCellValue(sheet, "B2", endTimeDisplay)
 	f.SetCellValue(sheet, "A3", "平台名称")
 	f.SetCellValue(sheet, "B3", "热盒")
 	f.SetCellValue(sheet, "A4", "筛选日期内合计进账金额")
 	f.SetCellValue(sheet, "B4", selectTotalDateIncome)
 	f.SetCellValue(sheet, "A5", "筛选日期内合计冻结金额")
-	f.SetCellValue(sheet, "B5", selectDateForceFreezeSum)
+	f.SetCellValue(sheet, "B5", float64(selectDateForceFreezeSum)/100)
 
 	// 表头（第7行）
 	headers := []string{
@@ -688,20 +692,21 @@ func YopTestUserExport(c *gin.Context) {
 
 		// 钱包余额
 		totalBalance := 0.0
+		walletFreezeBalanceAbs := 0.0
+		availableBalance := 0.0
+		balanceDisplay := "0"
 		if w, ok := walletMap[user.UserId]; ok {
 			totalBalance = w.TotalBalance
-		}
-
-		// 强制冻结金额
-		forceFreeze := int64(0)
-		if ff, ok := forceFreezeMap[user.UserId]; ok {
-			if ff < 0 {
-				ff = -ff
+			fb := w.FreezeBalance
+			if fb < 0 {
+				fb = -fb
 			}
-			forceFreeze = ff
+			walletFreezeBalanceAbs = fb
+			availableBalance = math.Round((w.TotalBalance+w.FreezeBalance)*100) / 100
+			balanceDisplay = fmt.Sprintf("%g(%g正常+%g冻结)", totalBalance, availableBalance, walletFreezeBalanceAbs)
 		}
 
-		// 今日进账
+	// 今日进账
 		dailyIncome := 0.0
 		if inc, ok := userIncomeMap[user.Id]; ok {
 			dailyIncome = inc
@@ -715,17 +720,17 @@ func YopTestUserExport(c *gin.Context) {
 			}
 		}
 
-		// 筛选日期内冻结金额
-		selectDateForceFreeze := int64(0)
+		// 筛选日期内冻结金额（数据库单位：分，转为元）
+		selectDateForceFreeze := 0.0
 		if selectDateForceFreezeUserMap != nil {
 			if ff, ok := selectDateForceFreezeUserMap[user.UserId]; ok {
-				selectDateForceFreeze = ff
+				selectDateForceFreeze = float64(ff) / 100
 			}
 		}
 
 		row := []interface{}{
 			user.RealName, user.Mobile, partitionName, userType, user.Remark,
-			totalBalance, user.Rate, user.FreezeRate, forceFreeze,
+			balanceDisplay, user.Rate, user.FreezeRate, walletFreezeBalanceAbs,
 			user.TotalIncome, dailyIncome, selectDateIncome, selectDateForceFreeze,
 			user.CreatedAt.Format("2006-01-02 15:04:05"),
 		}
