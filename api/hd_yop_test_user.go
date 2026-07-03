@@ -653,7 +653,7 @@ func YopTestUserExport(c *gin.Context) {
 	f.SetCellValue(sheet, "A2", "数据筛选结束日期")
 	f.SetCellValue(sheet, "B2", req.EndTime)
 	f.SetCellValue(sheet, "A3", "平台名称")
-	f.SetCellValue(sheet, "B3", "HOTDOG")
+	f.SetCellValue(sheet, "B3", "热盒")
 	f.SetCellValue(sheet, "A4", "筛选日期内合计进账金额")
 	f.SetCellValue(sheet, "B4", selectTotalDateIncome)
 	f.SetCellValue(sheet, "A5", "筛选日期内合计冻结金额")
