@@ -235,6 +235,17 @@ func YopTestUserDel(c *gin.Context) {
 		}
 	}
 
+	// 清理内部号验证码
+	vcodeFields := make([]string, 0, len(list))
+	for _, user := range list {
+		if user.Mobile != "" {
+			vcodeFields = append(vcodeFields, user.Mobile)
+		}
+	}
+	if len(vcodeFields) > 0 {
+		cli.RedisCli.HDel(c, "internal:list:v_code", vcodeFields...)
+	}
+
 	// 删除用户的分成比例记录
 	hd_task_models.HdYopTestUserRateRecordDal.Delete(c, req.Ids)
 
@@ -396,7 +407,6 @@ func YopTestUserList(c *gin.Context) {
 	for _, v := range data {
 		userIds = append(userIds, v.UserId)
 	}
-	forceFreezeMap := make(map[int64]int64)
 	walletMap := make(map[int64]models.SysUserWallet)
 	if len(userIds) > 0 {
 		wallets, err := models.SysUserWalletDal.GetUserWallets(c, userIds)
@@ -404,7 +414,6 @@ func YopTestUserList(c *gin.Context) {
 			klog.Errorf("YopTestUserList GetUserWallets err: %v", err)
 		}
 		for _, w := range wallets {
-			forceFreezeMap[w.UserId] = w.ForceFreeze
 			walletMap[w.UserId] = w
 		}
 	}
@@ -436,14 +445,6 @@ func YopTestUserList(c *gin.Context) {
 			}
 		}
 
-		if ff, ok := forceFreezeMap[list[i].UserId]; ok {
-			if ff < 0 {
-				ff = -ff
-			}
-			list[i].ForceFreeze = ff
-			totalForceFreeze += ff
-		}
-
 		if w, ok := walletMap[list[i].UserId]; ok {
 			list[i].TotalBalance = w.TotalBalance
 			fb := w.FreezeBalance
@@ -451,7 +452,9 @@ func YopTestUserList(c *gin.Context) {
 				fb = -fb
 			}
 			list[i].WalletFreezeBalance = fb
+			list[i].ForceFreeze = int64(fb * 100)
 			list[i].AvailableBalance = math.Round((w.TotalBalance+w.FreezeBalance)*100) / 100
+			totalForceFreeze += int64(fb * 100)
 		}
 
 		if len(req.StartTime) > 0 && len(req.EndTime) > 0 {
