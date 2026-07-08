@@ -202,6 +202,8 @@ func YopTestUserDel(c *gin.Context) {
 		return
 	}
 
+	klog.Infof("YopTestUserDel called, ids=%v", req.Ids)
+
 	list, err := hd_task_models.HdYopTestUserDal.GetHdYopTestUsers(c, map[string][]any{
 		"id in ?": {req.Ids},
 	}, []string{}, len(req.Ids))
@@ -238,12 +240,21 @@ func YopTestUserDel(c *gin.Context) {
 	// 清理内部号验证码
 	vcodeFields := make([]string, 0, len(list))
 	for _, user := range list {
+		klog.Infof("YopTestUserDel user: userId=%d, mobile=%s", user.UserId, user.Mobile)
 		if user.Mobile != "" {
 			vcodeFields = append(vcodeFields, user.Mobile)
 		}
 	}
 	if len(vcodeFields) > 0 {
-		cli.RedisCli.HDel(c, "internal:list:v_code", vcodeFields...)
+		klog.Infof("YopTestUserDel clean vcode, ids=%v, mobiles=%v", req.Ids, vcodeFields)
+		n, err := cli.HotDogRedis.HDel(c, "internal:list:v_code", vcodeFields...).Result()
+		if err != nil {
+			klog.Errorf("YopTestUserDel clean vcode HDel err: %v, mobiles=%v", err, vcodeFields)
+		} else {
+			klog.Infof("YopTestUserDel clean vcode HDel done, deleted=%d, mobiles=%v", n, vcodeFields)
+		}
+	} else {
+		klog.Infof("YopTestUserDel clean vcode skip, no mobile found, list size=%d", len(list))
 	}
 
 	// 删除用户的分成比例记录
@@ -251,7 +262,15 @@ func YopTestUserDel(c *gin.Context) {
 
 	// 更新到adm操作日志
 	operatorId, _ := c.Get("user_id")
-	jsonStr, _ := json.Marshal(req)
+	mobiles := make([]string, 0, len(list))
+	for _, user := range list {
+		mobiles = append(mobiles, user.Mobile)
+	}
+	requestData := map[string]interface{}{
+		"ids":     req.Ids,
+		"mobiles": mobiles,
+	}
+	jsonStr, _ := json.Marshal(requestData)
 	err = models.OperateRecord{Ctx: c}.CreateRecord(models.AiMatchBackendOperateRecord{
 		UserId:      cast.ToInt64(operatorId),
 		Username:    c.GetString("adm_user_name"),
@@ -709,7 +728,7 @@ func YopTestUserExport(c *gin.Context) {
 			balanceDisplay = fmt.Sprintf("%g(%g正常+%g冻结)", totalBalance, availableBalance, walletFreezeBalanceAbs)
 		}
 
-	// 今日进账
+		// 今日进账
 		dailyIncome := 0.0
 		if inc, ok := userIncomeMap[user.Id]; ok {
 			dailyIncome = inc
